@@ -417,15 +417,19 @@ done
 
 # Optional firewall settings
 echo
-echo "Firewall configuration (optional, press Enter for default 0.0.0.0):"
-echo -n "  Start IP [0.0.0.0]: "
+echo "Firewall configuration (optional). Press Enter to skip creating a firewall rule; you can add rules later when IPs are known."
+echo -n "  Start IP (leave empty to skip): "
 read -r FIREWALL_START_IP
 FIREWALL_START_IP=$(printf '%s' "$FIREWALL_START_IP" | tr -d '[:cntrl:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-FIREWALL_START_IP=${FIREWALL_START_IP:-0.0.0.0}
-echo -n "  End IP   [0.0.0.0]: "
+echo -n "  End IP   (leave empty to skip): "
 read -r FIREWALL_END_IP
 FIREWALL_END_IP=$(printf '%s' "$FIREWALL_END_IP" | tr -d '[:cntrl:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-FIREWALL_END_IP=${FIREWALL_END_IP:-0.0.0.0}
+
+if [[ "$FIREWALL_START_IP" == "0.0.0.0" || "$FIREWALL_END_IP" == "0.0.0.0" ]]; then
+  info "Using 0.0.0.0 is not allowed. Firewall creation will be skipped; you can add firewall rules later when IPs are known."
+  FIREWALL_START_IP=""
+  FIREWALL_END_IP=""
+fi
 
 # Prompt for Azure Entra ID admin (select from list)
 echo
@@ -576,9 +580,14 @@ create_sql_server() {
       printf "    - Service objective: Basic\n"
       printf "    - Max size: 2GB\n"
       echo
-      printf "  Firewall rule: AllowPublicAccess\n"
-      printf "    - Start IP: %s\n" "$FIREWALL_START_IP"
-      printf "    - End IP: %s\n" "$FIREWALL_END_IP"
+      # Firewall display: if both IPs provided and not 0.0.0.0 show them, otherwise indicate skipped
+      if [[ -n "${FIREWALL_START_IP:-}" && -n "${FIREWALL_END_IP:-}" && "$FIREWALL_START_IP" != "0.0.0.0" && "$FIREWALL_END_IP" != "0.0.0.0" ]]; then
+        printf "  Firewall rule: AllowPublicAccess\n"
+        printf "    - Start IP: %s\n" "$FIREWALL_START_IP"
+        printf "    - End IP: %s\n" "$FIREWALL_END_IP"
+      else
+        printf "  Firewall rule: (skipped) — no IPs provided; you can add rules later\n"
+      fi
       echo
       printf "  Azure Entra (AD) admin to assign: %s (Object ID: %s)\n" "$ENTRA_ADMIN_UPN" "$ENTRA_ADMIN_OBJECT_ID"
       echo
@@ -659,13 +668,18 @@ az sql db create \
   --service-objective Basic \
   --max-size 2GB
 
-# Configure firewall rule for public access
-az sql server firewall-rule create \
-  --resource-group $RESOURCE_GROUP \
-  --server $SQL_SERVER_NAME \
-  --name AllowPublicAccess \
-  --start-ip-address $FIREWALL_START_IP \
-  --end-ip-address $FIREWALL_END_IP
+# Configure firewall rule for public access (only if IPs were provided and not skipped)
+if [[ -n "${FIREWALL_START_IP:-}" && -n "${FIREWALL_END_IP:-}" && "$FIREWALL_START_IP" != "0.0.0.0" && "$FIREWALL_END_IP" != "0.0.0.0" ]]; then
+  az sql server firewall-rule create \
+    --resource-group "$RESOURCE_GROUP" \
+    --server "$SQL_SERVER_NAME" \
+    --name AllowPublicAccess \
+    --start-ip-address "$FIREWALL_START_IP" \
+    --end-ip-address "$FIREWALL_END_IP"
+else
+  info "Firewall creation skipped — no valid start/end IP provided. You can add firewall rules later with:"
+  info "  az sql server firewall-rule create --resource-group <RG> --server <SERVER> --name <NAME> --start-ip-address <IP> --end-ip-address <IP>"
+fi
 
 success "Deployment complete. Both SQL authentication and Azure Entra ID authentication are enabled."
 echo
