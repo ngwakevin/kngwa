@@ -1,32 +1,106 @@
+
 # Azure CLI deploy helper — azurecli-deploy/deploy_sql.sh
 
-This folder contains `deploy_sql.sh`, an interactive script that creates an Azure SQL Server, a small initial database, firewall rules, and assigns an Azure Entra (AD) admin.
+This folder contains `deploy_sql.sh`, an interactive script that creates an Azure SQL Server, a small initial database, a firewall rule, and assigns an Azure Entra (AD) admin.
 
-Important: all users who will run this script already have the required Azure permissions in the target subscription/resource groups. You can skip any service-principal creation steps — just authenticate with `az login` or run inside Cloud Shell/Agents that already use the existing credentials.
+Important: all users who will run this script already have the required Azure permissions in the target subscription/resource groups. Authenticate using `az login` or run the script inside Cloud Shell / agents that already run under the appropriate credentials.
 
 Quick usage
-1. Preview the planned changes (DRY RUN):
+1) Preview the planned changes (safe dry-run — no Azure calls):
 ```bash
 DRY_RUN=1 ./deploy_sql.sh
 ```
 
-2. Run interactively to create resources (prompts for confirmation and secrets):
+2) Run interactively to create resources (the script will prompt for secrets and confirmations):
 ```bash
 ./deploy_sql.sh
 ```
 
+What the script will ask for (explicit list)
+- Resource Group name (RESOURCE_GROUP)
+	- Example: `rg-dev-kevin`
+	- Validation: trimmed; used verbatim. If the RG exists the script will show current resources and ask to continue.
+- Azure region / location (LOCATION)
+	- Example: `centralus`, `eastus2` (typos will cause an Azure error)
+- SQL Server name (SQL_SERVER_NAME)
+	- Example: `sql-dev-kevin`
+	- Must be globally unique within Azure SQL servers in the subscription.
+- SQL Admin username (SQL_ADMIN_USER)
+	- Example: `sqladmin`
+- SQL Admin password (SQL_ADMIN_PASS)
+	- Input is hidden when typed.
+- SQL Database name (SQL_DB_NAME)
+	- Example: `sqldb-dev-kevin`
+	- Characters allowed: letters, digits, dot (.), underscore (_), hyphen (-). The script will suggest a sanitized name if invalid characters are entered.
+	- Default service objective used by the script: Basic, max-size 2GB (small starter database to grow later).
+- Firewall start and end IP (FIREWALL_START_IP / FIREWALL_END_IP)
+	- Default is `0.0.0.0` for public access (you can restrict to your client IP or a CIDR range).
+- Azure Entra (AD) admin selection (ENTRA_ADMIN_UPN / ENTRA_ADMIN_OBJECT_ID)
+	- The script lists a small set of UPNs + object IDs and asks you to choose one. The selected UPN and object id are used with `az sql server ad-admin create`.
+- Resource Group tags (Owner, ProjectName, BusinessUnit, DeployBy, ApplicationName)
+	- Optional values; they are applied when creating/updating the RG.
+- Backup storage redundancy selection (BACKUP_STORAGE_REDUNDANCY)
+	- Options: `Local` (default), `Geo`, `Zone` (script normalizes values).
+- Final confirmation prompts
+	- The script prints a clear planned-resources summary (Resource Group, SQL Server, DB, Firewall rule, Entra admin, tags) and asks `Proceed? (Y/n)` before any Azure changes.
+
+Environment variables (for non-interactive / CI usage)
+The script accepts values from the environment. You can export these before running the script in CI or a wrapper:
+
+	RESOURCE_GROUP
+	LOCATION
+	SQL_SERVER_NAME
+	SQL_ADMIN_USER
+	SQL_ADMIN_PASS (mark secret in pipeline)
+	SQL_DB_NAME
+	FIREWALL_START_IP
+	FIREWALL_END_IP
+	ENTRA_ADMIN_UPN
+	ENTRA_ADMIN_OBJECT_ID
+	TAG_OWNER
+	TAG_PROJECTNAME
+	TAG_BUSINESSUNIT
+	TAG_DEPLOYBY
+	TAG_APPLICATIONNAME
+	BACKUP_STORAGE_REDUNDANCY
+	DRY_RUN (set to `1` to preview; `0` to execute)
+
+Example (CI wrapper):
+```bash
+export RESOURCE_GROUP='rg-dev-kevin'
+export LOCATION='centralus'
+export SQL_SERVER_NAME='sql-dev-kevin'
+export SQL_ADMIN_USER='sqladmin'
+export SQL_ADMIN_PASS='$(sql_admin_secret)'
+export SQL_DB_NAME='sqldb-dev-kevin'
+export FIREWALL_START_IP='0.0.0.0'
+export FIREWALL_END_IP='0.0.0.0'
+export ENTRA_ADMIN_UPN='user@contoso.onmicrosoft.com'
+export ENTRA_ADMIN_OBJECT_ID='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+export BACKUP_STORAGE_REDUNDANCY='Local'
+export DRY_RUN='0'
+./deploy_sql.sh
+```
+
 CI / Azure DevOps notes
-- If running from Azure DevOps using the built-in service connection (project already configured), you can run the script directly in the `AzureCLI@2` task by exporting environment variables (see examples in the project wiki).
-- Because users already have access, you do not need to create a new service principal — just ensure the pipeline's service connection uses the correct subscription/credentials.
-- For non-interactive CI runs, set environment variables for all inputs and set `DRY_RUN=0`. Consider adding an `AUTO_APPROVE=1` flag if you want to skip confirmation prompts in CI. Ask me and I can add that option.
+- Use an `AzureCLI@2` task with an existing service connection. Because your users already have access, you can reuse the project service connection configured with the appropriate subscription/credentials.
+- For a non-interactive pipeline, prefer exporting the environment variables above (with secrets marked in the pipeline GUI) and set `DRY_RUN=0`.
+- The script currently reads confirmations from `/dev/tty`; for full CI automation you can either:
+	- Add an `AUTO_APPROVE=1` or `--yes` option (I can implement this), or
+	- Use a small wrapper that sets `DRY_RUN=0` and ensures the script is not reading from `/dev/tty` (less recommended).
 
-Notes & troubleshooting
-- Use `DRY_RUN=1` to avoid any Azure calls and verify planned resources.
-- Validate the `LOCATION` string carefully (typos cause region errors).
-- The script uses `python3` to best-effort parse Azure capability data; ensure `python3` is available on the runner.
-- The script contains fallbacks for older Azure CLI versions (e.g., `--backup-storage-redundancy` flag). If you see CLI errors, upgrade `az` on the agent.
+Required tools on your machine / runner
+- Azure CLI (`az`) — use a recent version for best compatibility.
+- `python3` — used by the script to parse Azure capability JSON (optional fallback exists if missing).
+- `zsh` or `bash` shell to run the script (script was developed for `zsh` but is POSIX-friendly where possible).
 
-If you'd like, I can add a small pipeline YAML that runs non-interactively (exports env vars and runs the script) and/or add an `AUTO_APPROVE` flag to the script for CI usage.
+Behavior notes
+- The script defaults to creating a very small DB (Basic, 2GB) to minimize cost and grow later.
+- If the Azure CLI on the runner doesn't support `--backup-storage-redundancy`, the script will retry server creation without that flag.
+- Database names are sanitized automatically; the script will prompt to accept a suggested sanitized name when invalid characters are provided.
+
+If you want, I can update the script to add an `--yes`/`AUTO_APPROVE` flag and a documented non-interactive mode so the pipeline can run without any TTY prompts.
+
 Azure CLI helper scripts to create Azure SQL servers and databases.
 
 Files
