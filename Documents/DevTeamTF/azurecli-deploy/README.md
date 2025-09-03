@@ -18,19 +18,19 @@ DRY_RUN=1 ./deploy_sql.sh
 
 What the script will ask for (explicit list)
 - Resource Group name (RESOURCE_GROUP)
-	- Example: `rg-dev-kevin`
+	- Example: `<RESOURCE_GROUP>` (e.g. `rg-dev-01`)
 	- Validation: trimmed; used verbatim. If the RG exists the script will show current resources and ask to continue.
 - Azure region / location (LOCATION)
-	- Example: `centralus`, `eastus2` (typos will cause an Azure error)
+	- Example: `<LOCATION>` (e.g. `centralus`, `eastus2`) — typos will cause an Azure error
 - SQL Server name (SQL_SERVER_NAME)
-	- Example: `sql-dev-kevin`
+	- Example: `<SQL_SERVER_NAME>` (global-unique identifier)
 	- Must be globally unique within Azure SQL servers in the subscription.
 - SQL Admin username (SQL_ADMIN_USER)
-	- Example: `sqladmin`
+	- Example: `<SQL_ADMIN_USER>` (e.g. `sqladmin`)
 - SQL Admin password (SQL_ADMIN_PASS)
 	- Input is hidden when typed.
 - SQL Database name (SQL_DB_NAME)
-	- Example: `sqldb-dev-kevin`
+	- Example: `<SQL_DB_NAME>` (e.g. `appdb`)
 	- Characters allowed: letters, digits, dot (.), underscore (_), hyphen (-). The script will suggest a sanitized name if invalid characters are entered.
 	- Default service objective used by the script: Basic, max-size 2GB (small starter database to grow later).
 - Firewall start and end IP (FIREWALL_START_IP / FIREWALL_END_IP)
@@ -67,16 +67,16 @@ The script accepts values from the environment. You can export these before runn
 
 Example (CI wrapper):
 ```bash
-export RESOURCE_GROUP='rg-dev-kevin'
-export LOCATION='centralus'
-export SQL_SERVER_NAME='sql-dev-kevin'
-export SQL_ADMIN_USER='sqladmin'
+export RESOURCE_GROUP='<RESOURCE_GROUP>'
+export LOCATION='<LOCATION>'
+export SQL_SERVER_NAME='<SQL_SERVER_NAME>'
+export SQL_ADMIN_USER='<SQL_ADMIN_USER>'
 export SQL_ADMIN_PASS='$(sql_admin_secret)'
-export SQL_DB_NAME='sqldb-dev-kevin'
+export SQL_DB_NAME='<SQL_DB_NAME>'
 export FIREWALL_START_IP='0.0.0.0'
 export FIREWALL_END_IP='0.0.0.0'
-export ENTRA_ADMIN_UPN='user@contoso.onmicrosoft.com'
-export ENTRA_ADMIN_OBJECT_ID='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+export ENTRA_ADMIN_UPN='<ENTRA_ADMIN_UPN>'
+export ENTRA_ADMIN_OBJECT_ID='<ENTRA_ADMIN_OBJECT_ID>'
 export BACKUP_STORAGE_REDUNDANCY='Local'
 export DRY_RUN='0'
 ./deploy_sql.sh
