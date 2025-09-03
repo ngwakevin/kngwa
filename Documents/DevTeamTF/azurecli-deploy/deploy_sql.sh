@@ -425,10 +425,55 @@ echo -n "  End IP   (leave empty to skip): "
 read -r FIREWALL_END_IP
 FIREWALL_END_IP=$(printf '%s' "$FIREWALL_END_IP" | tr -d '[:cntrl:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
+# If user explicitly entered 0.0.0.0 treat as skip for safety
 if [[ "$FIREWALL_START_IP" == "0.0.0.0" || "$FIREWALL_END_IP" == "0.0.0.0" ]]; then
   info "Using 0.0.0.0 is not allowed. Firewall creation will be skipped; you can add firewall rules later when IPs are known."
   FIREWALL_START_IP=""
   FIREWALL_END_IP=""
+fi
+
+# If both firewall IPs are empty, offer to auto-detect your current public IP (unless DRY_RUN)
+if [[ -z "${FIREWALL_START_IP:-}" && -z "${FIREWALL_END_IP:-}" ]]; then
+  if [[ "${DRY_RUN:-}" == "1" ]]; then
+    info "No firewall IPs provided — dry-run mode will not detect your public IP. Firewall will be skipped."
+  else
+    printf "No firewall IPs provided. Detect and open access to your current public IP now? (y/N): " > /dev/tty
+    read -r detect_choice < /dev/tty
+    detect_choice=${detect_choice:-n}
+    if [[ "${detect_choice:l}" == "y" ]]; then
+      # try to detect public IP using common services
+      detected_ip=""
+      for svc in "https://api.ipify.org" "https://ifconfig.me/ip" "https://checkip.amazonaws.com"; do
+        if command -v curl >/dev/null 2>&1; then
+          detected_ip=$(curl -s --max-time 5 "$svc" || true)
+        elif command -v wget >/dev/null 2>&1; then
+          detected_ip=$(wget -qO- --timeout=5 "$svc" || true)
+        fi
+        detected_ip=$(printf '%s' "$detected_ip" | tr -d '\n' | tr -d '[:space:]')
+        # basic IPv4 validation
+        if printf '%s' "$detected_ip" | grep -E -q '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+          # validate each octet <= 255
+          ok=true
+          IFS='.' read -r o1 o2 o3 o4 <<< "$detected_ip"
+          for oct in $o1 $o2 $o3 $o4; do
+            if (( oct < 0 || oct > 255 )); then ok=false; break; fi
+          done
+          if [[ "$ok" == true ]]; then
+            FIREWALL_START_IP="$detected_ip"
+            FIREWALL_END_IP="$detected_ip"
+            success "Detected public IP: $detected_ip — will create a firewall rule to allow this IP."
+            break
+          fi
+        fi
+        detected_ip=""
+      done
+      if [[ -z "${FIREWALL_START_IP:-}" ]]; then
+        error "Unable to detect a valid public IP automatically. Firewall will be skipped; you can add rules later."
+      fi
+    else
+      info "Firewall creation skipped per user choice; you can add rules later when IPs are known."
+    fi
+  fi
 fi
 
 # Prompt for Azure Entra ID admin (select from list)
