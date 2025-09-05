@@ -82,12 +82,6 @@ export DRY_RUN='0'
 ./deploy_sql.sh
 ```
 
-CI / Azure DevOps notes
-- Use an `AzureCLI@2` task with an existing service connection. Because your users already have access, you can reuse the project service connection configured with the appropriate subscription/credentials.
-- For a non-interactive pipeline, prefer exporting the environment variables above (with secrets marked in the pipeline GUI) and set `DRY_RUN=0`.
-- The script currently reads confirmations from `/dev/tty`; for full CI automation you can either:
-	- Add an `AUTO_APPROVE=1` or `--yes` option (I can implement this), or
-	- Use a small wrapper that sets `DRY_RUN=0` and ensures the script is not reading from `/dev/tty` (less recommended).
 
 Required tools on your machine / runner
 - Azure CLI (`az`) — use a recent version for best compatibility.
