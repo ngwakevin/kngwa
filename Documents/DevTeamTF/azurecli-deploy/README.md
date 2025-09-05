@@ -16,6 +16,12 @@ DRY_RUN=1 ./deploy_sql.sh
 ./deploy_sql.sh
 ```
 
+3) Non-interactive / CI-run with automatic 'yes' behavior:
+```bash
+# Export env vars (see below) and set AUTO_YES=1 to skip interactive subscription and final-confirm prompts
+DRY_RUN=1 AUTO_YES=1 ./deploy_sql.sh
+```
+
 What the script will ask for (explicit list)
 - Resource Group name (RESOURCE_GROUP)
 	- Example: `<RESOURCE_GROUP>` (e.g. `rg-dev-01`)
@@ -64,6 +70,11 @@ The script accepts values from the environment. You can export these before runn
 	TAG_APPLICATIONNAME
 	BACKUP_STORAGE_REDUNDANCY
 	DRY_RUN (set to `1` to preview; `0` to execute)
+	AUTO_YES (set to `1` to auto-accept subscription and final confirmation prompts)
+
+Preset subscription
+- The script includes a preset subscription entry for convenience ("Azure Enterprise Development" — id `eb252d81-f912-42c7-b654-e8f1bf9a4bb0`).
+  When choosing a subscription interactively the preset will appear alongside subscriptions discovered by `az account list` and be marked `[preset]`.
 
 Example (CI wrapper):
 ```bash
