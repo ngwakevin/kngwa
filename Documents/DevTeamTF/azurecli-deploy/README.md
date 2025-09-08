@@ -22,6 +22,103 @@ DRY_RUN=1 ./deploy_sql.sh
 DRY_RUN=1 AUTO_YES=1 ./deploy_sql.sh
 ```
 
+How to deploy (clone → login → run)
+-----------------------------------
+Follow these steps on a local machine or CI runner to download the repo, authenticate to Azure, preview the plan, and run the deployment.
+
+1) Clone locally and prepare scripts
+```bash
+git clone https://github.com/ngwakevin/kngwa.git
+cd kngwa/azurecli-deploy
+chmod +x deploy_sql*.sh
+```
+
+2) Ensure required tools
+- Azure CLI (az): verify with `az --version`
+- python3: `python3 --version` (used to parse capability JSON)
+- Shell: `zsh` or `bash` (script developed for zsh)
+- Optional: PowerShell Core (`pwsh`) on Windows
+
+3) Login to Azure
+CLI (recommended):
+```bash
+az login
+# optionally select a subscription by name or id
+az account set --subscription "Azure Enterprise Development"  # or the subscription id
+```
+
+PowerShell (optional):
+```powershell
+Connect-AzAccount
+Select-AzSubscription -SubscriptionName "Azure Enterprise Development"
+```
+
+4) Preview (safe DRY_RUN) — no Azure changes
+Provide env vars (example) and run a dry-run to preview the planned resources:
+```bash
+DRY_RUN=1 AUTO_YES=1 \
+RESOURCE_GROUP=rg-infra-dev \
+LOCATION=centralus \
+SQL_SERVER_NAME=sql-test-new \
+SQL_ADMIN_USER=sqladmin \
+SQL_ADMIN_PASS='S3cr3t!' \
+SQL_DB_NAME=dbtest \
+SERVICE_OBJECTIVE=S1 \
+DESIRED_MAX_SIZE_RAW=10GB \
+BACKUP_STORAGE_REDUNDANCY=Local \
+FIREWALL_START_IP=0.0.0.0 \
+FIREWALL_END_IP=0.0.0.0 \
+ENTRA_ADMIN_UPN='user@contoso.onmicrosoft.com' \
+ENTRA_ADMIN_OBJECT_ID='00000000-0000-0000-0000-000000000000' \
+TAG_OWNER='you@contoso.com' \
+TAG_PROJECTNAME='Infra' \
+TAG_BUSINESSUNIT='Infra' \
+TAG_DEPLOYBY='automation' \
+TAG_APPLICATIONNAME='app' \
+./deploy_sql.sh
+```
+
+5) Run (create resources)
+Remove `DRY_RUN=1` to make the changes. Use `AUTO_YES=1` for CI or to skip interactive prompts.
+```bash
+AUTO_YES=1 \
+RESOURCE_GROUP=rg-infra-dev \
+LOCATION=centralus \
+SQL_SERVER_NAME=sql-test-new \
+SQL_ADMIN_USER=sqladmin \
+SQL_ADMIN_PASS='S3cr3t!' \
+SQL_DB_NAME=dbtest \
+SERVICE_OBJECTIVE=S1 \
+DESIRED_MAX_SIZE_RAW=10GB \
+BACKUP_STORAGE_REDUNDANCY=Local \
+FIREWALL_START_IP=1.2.3.4 \
+FIREWALL_END_IP=1.2.3.4 \
+ENTRA_ADMIN_UPN='user@contoso.onmicrosoft.com' \
+ENTRA_ADMIN_OBJECT_ID='00000000-0000-0000-0000-000000000000' \
+TAG_OWNER='you@contoso.com' \
+TAG_PROJECTNAME='Infra' \
+TAG_BUSINESSUNIT='Infra' \
+TAG_DEPLOYBY='automation' \
+TAG_APPLICATIONNAME='app' \
+./deploy_sql.sh
+```
+
+6) Existing Resource Group flow
+If you already have a Resource Group and want to deploy into it, use the existing-RG helper which also accepts flags:
+```bash
+DRY_RUN=1 AUTO_YES=1 ./deploy_sql_existing_rg.sh --rg rg-infra-dev --location centralus --server sql-test-new --admin-user sqladmin --admin-pass 'S3cr3t!' --db dbtest --objective S1 --max-size 10GB --start-ip 1.2.3.4 --end-ip 1.2.3.4 --entra 4
+```
+
+CI notes and security
+- Store secrets (e.g., `SQL_ADMIN_PASS`) in your CI secret store and inject them as environment variables at runtime.
+- Use `DRY_RUN=1` when validating pipeline changes. Flip to `DRY_RUN=0` or omit it to execute.
+
+Troubleshooting
+- If `az` reports permission or tenant errors, run `az login` and `az account set --subscription <id|name>`.
+- If capacity/capabilities cannot be read from Azure, the script falls back to conservative defaults and may remove `--max-size` on retry.
+- On Windows, use PowerShell Core (`pwsh`) or WSL to run the scripts.
+
+
 What the script will ask for (explicit list)
 - Resource Group name (RESOURCE_GROUP)
 	- Example: `<RESOURCE_GROUP>` (e.g. `rg-dev-01`)
